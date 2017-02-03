@@ -1,15 +1,15 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 
-	"sort"
-
-	"github.com/codegangsta/cli"
+	"github.com/urfave/cli"
 )
 
 type Options struct {
@@ -144,4 +144,5 @@ func Env(w http.ResponseWriter, req *http.Request) {
 
 	io.WriteString(w, "</table>")
 	io.WriteString(w, "</html>")
+	fmt.Println("")
 }
