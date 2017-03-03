@@ -27,7 +27,7 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "explorer"
 	app.Usage = "web server to introspect a running container"
-	app.Version = "0.3.0"
+	app.Version = "0.3.1"
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
 			Name:        "port",
@@ -81,6 +81,7 @@ func Run(_ *cli.Context) {
 	mux := http.NewServeMux()
 	mux.Handle("/_/echo", Log(http.HandlerFunc(Echo)))
 	mux.Handle("/_/env", Log(http.HandlerFunc(Env)))
+	mux.Handle("/_/healthcheck", Log(http.HandlerFunc(Health)))
 	mux.Handle("/", Log(http.FileServer(http.Dir("/"))))
 
 	server := &http.Server{
@@ -203,6 +204,12 @@ func Echo(w http.ResponseWriter, req *http.Request) {
 
 	io.WriteString(w, "</html>")
 	req.Body.Close()
+}
+
+func Health(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	io.WriteString(w, `{"status":"ok"}`)
 }
 
 func Env(w http.ResponseWriter, _ *http.Request) {
