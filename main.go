@@ -16,8 +16,9 @@ import (
 )
 
 type Options struct {
-	Port      string
-	HeartBeat bool
+	Port          string
+	HeartBeat     bool
+	ShutdownDelay int
 }
 
 var opts Options
@@ -26,7 +27,7 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "explorer"
 	app.Usage = "web server to introspect a running container"
-	app.Version = "0.3.0-snapshot"
+	app.Version = "0.3.0"
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
 			Name:        "port",
@@ -36,9 +37,17 @@ func main() {
 			Destination: &opts.Port,
 		},
 		cli.BoolFlag{
+			Name:        "heartbeat",
 			Usage:       "heartbeat",
 			EnvVar:      "HEARTBEAT",
 			Destination: &opts.HeartBeat,
+		},
+		cli.IntFlag{
+			Name:        "delay",
+			Usage:       "seconds to wait after shutdown completes before exiting",
+			Value:       5,
+			EnvVar:      "DELAY",
+			Destination: &opts.ShutdownDelay,
 		},
 	}
 	app.Action = Run
@@ -64,7 +73,6 @@ func Run(_ *cli.Context) {
 	go HandleSignals(ch, exit)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	if opts.HeartBeat {
 		go HeartBeat(ctx)
@@ -89,8 +97,17 @@ func Run(_ *cli.Context) {
 	<-exit
 	child, _ := context.WithTimeout(ctx, 5*time.Second)
 	server.Shutdown(child)
+	cancel()
 
-	log.Println("Server graceful shutdown")
+	log.Println("server graceful shutdown")
+
+	if opts.ShutdownDelay > 0 {
+		log.Printf("delaying an additional %v seconds\n", opts.ShutdownDelay)
+		for i := 0; i < opts.ShutdownDelay; i++ {
+			time.Sleep(time.Second)
+			log.Println("delay ...", i+1)
+		}
+	}
 }
 
 func HandleSignals(ch <-chan os.Signal, exit chan<- int) {
