@@ -26,7 +26,7 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "explorer"
 	app.Usage = "web server to introspect a running container"
-	app.Version = "0.2.0"
+	app.Version = "0.3.0-snapshot"
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
 			Name:        "port",
