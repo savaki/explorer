@@ -31,4 +31,4 @@ _testmain.go
 
 # ignore generated files
 /explorer
-
+/gin-bin

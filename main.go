@@ -1,19 +1,23 @@
 package main
 
 import (
-	"fmt"
+	"context"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"sort"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/urfave/cli"
 )
 
 type Options struct {
-	Port string
+	Port      string
+	HeartBeat bool
 }
 
 var opts Options
@@ -29,19 +33,108 @@ func main() {
 			EnvVar:      "PORT",
 			Destination: &opts.Port,
 		},
+		cli.BoolFlag{
+			Usage:       "heartbeat",
+			EnvVar:      "HEARTBEAT",
+			Destination: &opts.HeartBeat,
+		},
 	}
 	app.Action = Run
 	app.Run(os.Args)
 }
 
-func Run(_ *cli.Context) {
-	http.HandleFunc("/_/echo", Echo)
-	http.HandleFunc("/_/env", Env)
-	http.Handle("/", http.FileServer(http.Dir("/")))
+func Log(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		log.Printf("%v %v\n", req.Method, req.RequestURI)
+		h.ServeHTTP(w, req)
+	})
+}
 
-	err := http.ListenAndServe(":"+opts.Port, nil)
-	if err != nil {
-		log.Fatalln(err)
+func Run(_ *cli.Context) {
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch,
+		syscall.SIGHUP,
+		syscall.SIGINT,
+		syscall.SIGTERM,
+		syscall.SIGQUIT)
+
+	exit := make(chan int)
+	go HandleSignals(ch, exit)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if opts.HeartBeat {
+		go HeartBeat(ctx)
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/_/echo", Log(http.HandlerFunc(Echo)))
+	mux.Handle("/_/env", Log(http.HandlerFunc(Env)))
+	mux.Handle("/", Log(http.FileServer(http.Dir("/"))))
+
+	server := &http.Server{
+		Addr:    ":" + opts.Port,
+		Handler: mux,
+	}
+
+	go func() {
+		if err := server.ListenAndServe(); err != nil {
+			log.Printf("listen: %s\n", err)
+		}
+	}()
+
+	<-exit
+	child, _ := context.WithTimeout(ctx, 5*time.Second)
+	server.Shutdown(child)
+
+	log.Println("Server graceful shutdown")
+}
+
+func HandleSignals(ch <-chan os.Signal, exit chan<- int) {
+	for {
+		s := <-ch
+
+		switch s {
+		// kill -SIGHUP XXXX
+		case syscall.SIGHUP:
+			log.Println("received SIGHUP")
+
+		// kill -SIGINT XXXX or Ctrl+c
+		case syscall.SIGINT:
+			exit <- 0
+			return
+
+		// kill -SIGTERM XXXX
+		case syscall.SIGTERM:
+			exit <- 0
+			return
+
+		// kill -SIGQUIT XXXX
+		case syscall.SIGQUIT:
+			exit <- 0
+			return
+
+		default:
+			exit <- 0
+			return
+		}
+	}
+}
+
+func HeartBeat(ctx context.Context) {
+	t := time.NewTimer(time.Second)
+	defer t.Stop()
+
+	for {
+		t.Reset(time.Second)
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			log.Println("heartbeat")
+		}
 	}
 }
 
@@ -144,5 +237,4 @@ func Env(w http.ResponseWriter, _ *http.Request) {
 
 	io.WriteString(w, "</table>")
 	io.WriteString(w, "</html>")
-	fmt.Println("")
 }
