@@ -34,7 +34,7 @@ func main() {
 	app.Run(os.Args)
 }
 
-func Run(c *cli.Context) {
+func Run(_ *cli.Context) {
 	http.HandleFunc("/_/echo", Echo)
 	http.HandleFunc("/_/env", Env)
 	http.Handle("/", http.FileServer(http.Dir("/")))
@@ -93,7 +93,7 @@ func Echo(w http.ResponseWriter, req *http.Request) {
 	req.Body.Close()
 }
 
-func Env(w http.ResponseWriter, req *http.Request) {
+func Env(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
 
